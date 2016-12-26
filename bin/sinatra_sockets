@@ -1,0 +1,10 @@
+#!/usr/bin/env ruby
+require 'sinatra_sockets'
+class SinatraSockets::CLI < Thor
+  desc "test", "run tests"
+  def test
+    puts "No tests have been wrritten"
+    exit
+  end
+end
+SinatraSockets::CLI.start ARGV

@@ -1,0 +1,5 @@
+#!/usr/bin/env ruby
+Dir.glob("./*.gem").each { |path| `rm #{path}` }
+puts `gem uninstall -x sinatra_sockets`
+puts `gem build sinatra_sockets.gemspec`
+Dir.glob("./*.gem").each { |path| puts `gem install -f #{path}` }
