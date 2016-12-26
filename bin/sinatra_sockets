@@ -1,10 +1,30 @@
 #!/usr/bin/env ruby
+
 require 'sinatra_sockets'
+
 class SinatraSockets::CLI < Thor
+
   desc "test", "run tests"
+
   def test
     puts "No tests have been wrritten"
     exit
   end
+
+  desc "generate PATH", <<-TXT
+    Generate skeleton sinatra / websockets directory.
+    Pass . as NAME to create a folder in the current directory.
+    The generated folder is named server_skeleton.
+  TXT
+
+  def generate path
+    if path.blank?
+      puts "exiting. NAME can't be blank"
+      exit
+    end
+    SinatraSockets.generate path
+  end
+
 end
+
 SinatraSockets::CLI.start ARGV

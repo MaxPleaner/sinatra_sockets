@@ -10,7 +10,7 @@ Gem::Specification.new do |s|
   s.email       = 'maxpleaner@gmail.com'
   s.required_ruby_version = '~> 2.3'
   s.homepage    = "http://github.com/maxpleaner/sinatra_sockets"
-  s.files       = Dir["lib/**/*.rb", "bin/*", "**/*.md", "LICENSE"]
+  s.files       = Dir["lib/**/*", "bin/*", "**/*.md", "LICENSE"]
   s.require_path = 'lib'
   s.required_rubygems_version = ">= 2.5.1"
   s.executables = Dir["bin/*"].map &File.method(:basename)

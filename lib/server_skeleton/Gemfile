@@ -1,0 +1,7 @@
+source "http://rubygems.org"
+
+gem 'gemmyrb'
+gem 'sinatra'
+gem 'faye-websocket'
+gem 'slim'
+
