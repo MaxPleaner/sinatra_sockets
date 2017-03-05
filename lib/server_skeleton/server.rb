@@ -3,7 +3,7 @@ require 'ostruct'
 
 # The "modular" version of Sinatra (no global monkeypatch).
 require 'sinatra/base'
-
+ 
 # Eventmachine-based websocket server
 require 'faye/websocket'
 
@@ -15,6 +15,12 @@ require 'gemmy'
 # A debugger. Pry has more functionality but has become buggy itself.
 require 'byebug'
 
+# better than CSS
+require 'sass'
+
+# better than JS
+require 'coffee_script'
+
 # Requires all ruby files in this directory.
 # Orders them by the count of "/" in their filename.
 # Therefore, shallower files are loaded first.
@@ -22,7 +28,9 @@ require 'byebug'
 # files according to their contained class hierarchies.
 # i.e. class Foo would be in foo.rb,
 #      class Foo::Bar would be in foo/bar.rb,
-Dir.glob("./**/*.rb").sort_by { |x| x.count("/") }.each &method(:require)
+Dir.glob("./**/*.rb").sort_by { |x| x.count("/") }.each do |path|
+  require path
+end
 
 # A global array of sockets.
 # This can certainly be altered to a hash if faster lookups are desired.

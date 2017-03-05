@@ -1,5 +1,6 @@
 class Routes::Index
 
+  Gemmy.patches.each { |patch| using patch }
   # This method is called from the Sinatra route handler
   def self.run(request)
     is_websocket = websocket_request? request

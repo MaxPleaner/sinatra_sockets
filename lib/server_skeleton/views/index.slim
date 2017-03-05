@@ -4,20 +4,23 @@ html
 
   head
 
-    script src='jquery.js'
+    / Browserify deps
+    script src='bundle.js'
+
+    / Style
+    == slim :"style/main"
 
   body
 
-    p hello
+    / HTML Components
+    == slim :"partials/url_input"
+    == slim :"partials/videos"
 
     coffee:
+      # namespace for script stuff
+      window.Mixer = {}
 
-      pathname = window.location.pathname
-      host = window.location.host
-
-      ws = new WebSocket "ws://#{host}#{pathname}"
-      ws.onopen = ->
-        console.log "opened"
-        ws.send("hello from client")
-      ws.onmessage= (m) -> console.log m.data
-      ws.onclose = -> console.log 'closed'
+    / Scripts
+    == slim :"script/add_video"
+    == slim :"script/websocket"
+    == slim :"script/url_input"
