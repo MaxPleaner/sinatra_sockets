@@ -1,15 +1,37 @@
-This is a gem which is available through rubygems:
+```sh
+$ gem install sinatra_sockets
+$ sinatra_sockets generate .
+```
 
-> gem install sinatra_sockets
+It will print the generated directory tree:
 
-After doing this the `sinatra_sockets generate PATH` shell command can be used.
+```txt
+Generated directory:
+./server_skeleton
+├── config.ru
+├── Gemfile
+├── Gemfile.lock
+├── lib
+│   ├── routes
+│   │   └── ws.rb
+│   └── routes.rb
+├── README.md
+└── server.rb
 
-The generated directory will be called `server_skeleton`. The PATH can be set to `.` for `./server_skeleton` to be created.
+2 directories, 7 files
+```
 
-The generated code is commented and should be read through and customized. 
+Start the server with thin:
 
-In its basic form it's a websocket server using faye-websockets and a very small sinatra front-end with Slim. 
+```sh
+cd server_skeleton
+bundle exec thin start
+# ... listening on localhost:3000
+```
 
-Once generated, `cd server_skeleton` and run `thin start`. Then visit `localhost:3000` and open the dev console.
+Earlier iterations of this had more files, mainly because of front-end stuff. However, I think a boiler is best
+if it's kept minimal, so I removed all that and now it's API only. At the same time, though, I added a token-based
+credential system as well as Github oAuth. Now it can tie in well with a front-end that's hosted on another server like
+Webpack. 
 
-The client will have pinged a message to the server, and the server responds by saying `got <message>`
+This can be seen in action in another boilerplate, [vue-webpack-coffee-slim-boiler](https://github.com/maxpleaner/vue-webpack-coffee-slim-boiler). sinatra_sockets is used as the server component there. 
