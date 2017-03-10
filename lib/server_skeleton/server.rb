@@ -94,13 +94,20 @@ class Server < Sinatra::Base
   end
 
   # Then they authenticate with Github
-  # TODO render a proper HTML page after this not just plaintext
+  #
+  # If the client refreshes the page after logging in, they should have stored
+  # the token in a cookie. If they hit this route with the same token, it
+  # keeps them logged in.
+  #
+  # This needs to be clicked like a regular link - no AJAX
+  #
+  # TODO render a proper HTML page after authenticating not just plaintext
   # saying they can close the window.
 
   get '/authenticate' do
     if token = params["token"]
       if socket = Sockets[token]
-        if !AuthenticatedTokens[token]
+        unless username = AuthenticatedTokens[token]
           authenticate!
           username = get_username
           Users[username] << (token)
@@ -119,20 +126,23 @@ class Server < Sinatra::Base
     end
   end
 
+  # This is hit over AJAX
+  # This closes the websocket connection
+  # Clients should request a new token and reconnect to ws after logging out
+
   get '/logout' do
+    cross_origin allow_origin: "http://localhost:8080"
     token = params[:token]
     if token
       if username = AuthenticatedTokens[token]
         logout!
-        Sockets[token].send({
-          action: "logged_out"
-        }.to_json)
+        AuthenticatedTokens.delete token
+        Users[username].delete token
+        Sockets[token].close
+        Sockets.delete token
+        { success: "logged out" }.to_json
       else
-        if ws = Sockets[token]
-          ws.send({msg: "can't find user to log out"}.to_json)
-        else
-          {error: "can't find user to log out"}.to_json
-        end
+        { error: "can't find user to log out" }.to_json
       end
     else
       { error: 'cant log out; no token provided' }.to_json
