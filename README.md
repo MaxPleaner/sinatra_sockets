@@ -35,3 +35,5 @@ credential system as well as Github oAuth. Now it can tie in well with a front-e
 Webpack. 
 
 This can be seen in action in another boilerplate, [vue-webpack-coffee-slim-boiler](https://github.com/maxpleaner/vue-webpack-coffee-slim-boiler). sinatra_sockets is used as the server component there. 
+
+The source code includes comments. 
