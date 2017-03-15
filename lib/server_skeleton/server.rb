@@ -1,70 +1,53 @@
-# ================================================
-# Entry to the Sinatra server
-# ------------------------------------------------
-# This file should not be run directly
-# Run it with "thin start"
-# ================================================
-
 require 'sinatra/base'
+require "sinatra/activerecord"
 require 'faye/websocket'
 require 'byebug'
 require 'sinatra_auth_github'
 require('dotenv'); Dotenv.load
 require 'sinatra/cross_origin'
+require 'active_support/all'
 
-# Requires all ruby files in this directory.
-# Orders them by the count of "/" in their filename.
-# Therefore, shallower files are loaded first.
-# The reasoning for this is to support the common convention of naming
-# files according to their contained class hierarchies.
-# i.e. class Foo would be in foo.rb,
-#      class Foo::Bar would be in foo/bar.rb,
-#
-# If there is the situation where a class depends on another that is in a 
-# deeper-nested file, there's always the option to pass the dependency at
-# runtime.
+require './crud_generator'
+require './server_push'
+require './models'
+require './ws'
 
-Dir.glob("./**/*.rb").sort_by { |x| x.count("/") }.each do |path|
-  require path
+Users = Hash.new { |hash, key| hash[key] = Set.new }
+AuthenticatedTokens = {}
+Sockets = Hash.new { |hash, key| hash[key] = Set.new }
+
+CLIENT_BASE_URL = if ENV["RACK_ENV"] == "production"
+  "https://maxpleaner.github.io"
+else
+  "http://localhost:8080"
 end
 
-# The REST routes (listed in this file) cannot store information in the session
-# since it's on another host.
-# Rather, they pass back and forth a token identifier
-#
-# This is the :token param, and is required on all routes except for
-# /token
-#
-# Here's an outline of the flow:
-#
-# 1. Client hits GET /token, gets a new token
-# 2. Client sends token with websocket connection request at GET /ws
-# 3. Client hits GET /authenticate and goes through Github oAuth login
-# 4. Github sends callback to server, which sends the OK to client over websocket
-
-# In leue of sessions, three global objects are used:
-#   Users: <Hash> with keys: <username> and vals: <Set(token)>
-#   AuthenticatedTokens: <hash> with keys: <token> and vals: <username>
-#   Sockets: <hash> with keys: <token> and vals: <socket>
-
-Sockets = {}
-AuthenticatedTokens = {}
-Users = Hash.new { |hash, key| hash[key] = Set.new }
-
 class Server < Sinatra::Base
+
+  register Sinatra::ActiveRecordExtension
+
+  # Database config
+  if ENV["RACK_ENV"] == "production"
+    configure :production do
+     db = URI.parse(ENV['DATABASE_URL'] || 'postgres:///localhost/mydb')
+     ActiveRecord::Base.establish_connection(
+       :adapter  => db.scheme == 'postgres' ? 'postgresql' : db.scheme,
+       :host     => db.host,
+       :username => db.user,
+       :password => db.password,
+       :database => db.path[1..-1],
+       :encoding => 'utf8'
+     )
+    end
+  else
+    set :database, {adapter: "sqlite3", database: "db.sqlite3"}
+    set :show_exceptions, true
+  end
 
   set :server, 'thin'
   Faye::WebSocket.load_adapter('thin')
 
-  # Allow some routes to be accessed from different origins
-  # This is unnecessary for websocket requests, since browsers don't implement
-  # the same restictions.
-
   register Sinatra::CrossOrigin
-
-  # Github oAuth setup
-  # session is needed for the Github oAuth gem
-  # but its not used elsewhere
 
   enable :sessions
   set :github_options, {
@@ -74,49 +57,68 @@ class Server < Sinatra::Base
   }
   register Sinatra::Auth::Github
   
-  # ------------------------------------------------
-  # Standard HTTP routes
-  # (get '/ws' is the entrance to the websocket API)
-  # ------------------------------------------------
 
-  # First clients request a token
+  logged_in_only = Proc.new do |request|
+    if AuthenticatedTokens[request.params['token']]
+      false
+    else
+      { error: ["not_authenticated for #{request.request_method} #{request.path_info}"] }.to_json
+    end
+  end
+
+  register Sinatra::CrudGenerator
+  crud_generate(
+    resource: "todo",
+    resource_class: Todo,
+    cross_origin_opts: {
+      allow_origin: CLIENT_BASE_URL
+    },
+    create: { auth: logged_in_only },
+    update: { auth: logged_in_only },
+    destroy: { auth: logged_in_only }
+  )
+
+  get '/health' do
+    cross_origin allow_origin: CLIENT_BASE_URL
+    status 200
+  end
 
   get '/token' do
-    cross_origin allow_origin: "http://localhost:8080"
+    cross_origin allow_origin: CLIENT_BASE_URL
     { token: new_token }.to_json
   end
 
-  # Then they send it in websocket connection request
-  # See server/lib/routes/ws.rb
-
   get '/ws' do
-    Routes::Ws.run(request)
+    Ws.run(request)
   end
 
-  # Then they authenticate with Github
-  #
-  # If the client refreshes the page after logging in, they should have stored
-  # the token in a cookie. If they hit this route with the same token, it
-  # keeps them logged in.
-  #
-  # This needs to be clicked like a regular link - no AJAX
-  #
   # TODO render a proper HTML page after authenticating not just plaintext
   # saying they can close the window.
-
   get '/authenticate' do
-    if token = params["token"]
-      if socket = Sockets[token]
-        unless username = AuthenticatedTokens[token]
+    username = nil
+    token = params["token"]
+    if token
+      sockets = Sockets[token]
+      if sockets.any?
+        username = AuthenticatedTokens[token]
+        unless username
           authenticate!
           username = get_username
-          Users[username] << (token)
           AuthenticatedTokens[token] = username
         end
-        socket.send({
-          action: "logged_in",
-          username: username
-        }.to_json)
+
+        new_token = SecureRandom.urlsafe_base64
+        Sockets[new_token] = Sockets.delete(token)
+        AuthenticatedTokens[new_token] = AuthenticatedTokens.delete(token)
+        Users[username] << new_token
+
+        sockets.each do |socket|
+          socket.send({
+            action: "logged_in",
+            username: username,
+            new_token: new_token
+          }.to_json)
+        end
         "authenticated as #{username}. (this window can be closed)"
       else
         "error. lost your websocket connection (this window can be closed)"
@@ -126,26 +128,22 @@ class Server < Sinatra::Base
     end
   end
 
-  # This is hit over AJAX
-  # This closes the websocket connection
-  # Clients should request a new token and reconnect to ws after logging out
-
   get '/logout' do
-    cross_origin allow_origin: "http://localhost:8080"
+    cross_origin allow_origin: CLIENT_BASE_URL
     token = params[:token]
     if token
       if username = AuthenticatedTokens[token]
         logout!
         AuthenticatedTokens.delete token
         Users[username].delete token
-        Sockets[token].close
+        Sockets[token].each { |ws| ws.close(1000, "logged_out") }
         Sockets.delete token
         { success: "logged out" }.to_json
       else
-        { error: "can't find user to log out" }.to_json
+        { error: ["can't find user to log out"] }.to_json
       end
     else
-      { error: 'cant log out; no token provided' }.to_json
+      { error: ['cant log out; no token provided'] }.to_json
     end
   end
 

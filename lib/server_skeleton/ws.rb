@@ -1,6 +1,5 @@
-class Routes::Ws
+class Ws
 
-  # Opens a new websocket connection from a request
   def self.run(request)
     return unless Faye::WebSocket.websocket?(request.env)
     socket = Faye::WebSocket.new(request.env)
@@ -13,7 +12,7 @@ class Routes::Ws
   def self.onopen(request, ws)
     token = request.params["token"]
     if token
-      Sockets[token] = ws
+      Sockets[token] << ws
     else
       ws.close
     end
@@ -21,18 +20,25 @@ class Routes::Ws
 
   def self.onmessage(request, ws, msg_data)
     data = JSON.parse msg_data
-    if data["action"] == "try_authenticate"
-      try_authenticate(ws, data["token"])
+    token = data["token"]
+    user = find_username(token)
+    case data["action"]
+    when "try_authenticate" then try_authenticate(ws, token)
     end
   end
 
   def self.onclose(request, ws)
-    delete_socket(request, ws)
+    token = CGI.parse(URI.parse(ws.url).to_s)["token"]
+    Sockets.delete token
   end
 
   class << self
 
     private
+
+    def find_username(token)
+      AuthenticatedTokens[token]
+    end
 
     def try_authenticate(ws, token)
       if username = AuthenticatedTokens[token]
@@ -45,11 +51,6 @@ class Routes::Ws
 
     def send_json_message(ws, msg)
       EM.next_tick { ws.send msg.to_json }
-    end
-
-    def delete_socket(request, ws)
-      token = CGI.parse(URI.parse(ws.url).to_s)["token"]
-      Sockets.delete token
     end
 
   end
