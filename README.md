@@ -184,7 +184,7 @@ def crud_generate(
 
 **Server push**
 
-This is a module which can be `included` into any model.
+This is a module which can be `include`d into any model.
 
 It patches three foundational methods in ActiveRecord:
 
